@@ -1,0 +1,57 @@
+workflows:
+  ios-simulator-screenshot:
+    name: SWC2026 - Simulator Screenshot
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+      vars:
+        BUNDLE_ID: "com.swc2026.app"
+        SCHEME_NAME: "SWC2026"
+    scripts:
+      - name: Install XcodeGen
+        script: |
+          brew install xcodegen
+
+      - name: Generate Xcode project
+        script: |
+          xcodegen generate
+
+      - name: Create and boot simulator
+        script: |
+          SIM_UDID=$(xcrun simctl create "SWC2026-Test" "iPhone 15")
+          xcrun simctl boot "$SIM_UDID"
+          echo "SIM_UDID=$SIM_UDID" >> $CM_ENV
+
+      - name: Build app for simulator
+        script: |
+          xcodebuild \
+            -project SWC2026.xcodeproj \
+            -scheme "$SCHEME_NAME" \
+            -sdk iphonesimulator \
+            -destination "id=$SIM_UDID" \
+            -derivedDataPath build \
+            build
+
+      - name: Install app on simulator
+        script: |
+          APP_PATH=$(find build -name "SWC2026.app" -type d | head -1)
+          echo "Found app at: $APP_PATH"
+          xcrun simctl install "$SIM_UDID" "$APP_PATH"
+
+      - name: Launch app and wait for load
+        script: |
+          xcrun simctl launch "$SIM_UDID" "$BUNDLE_ID"
+          echo "Waiting for site to load..."
+          sleep 15
+
+      - name: Take screenshot
+        script: |
+          mkdir -p "$CM_BUILD_DIR/screenshots"
+          xcrun simctl io "$SIM_UDID" screenshot "$CM_BUILD_DIR/screenshots/screenshot_1.png"
+          sleep 3
+          xcrun simctl io "$SIM_UDID" screenshot "$CM_BUILD_DIR/screenshots/screenshot_2.png"
+
+    artifacts:
+      - screenshots/*.png
+      - build/**/*.app
